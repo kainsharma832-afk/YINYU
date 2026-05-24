@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多模态言语康复系统 - 蒲公英积分版</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+  <style>
+    /* --- 1. 现代感基础设定 --- */
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.25);
+        --glass-border: rgba(255, 255, 255, 0.5);
+        --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        --text-primary: #2c3e50;
+    }
+
+    body {
+        margin: 0; padding: 0;
+        background-color: #000; /* 视频加载前的底色 */
+        overflow: hidden;
+        font-family: 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+        user-select: none;
+    }
+
+    /* 背景视频 */
+    #bg-video {
+        position: fixed; right: 0; bottom: 0;
+        min-width: 100%; min-height: 100%;
+        width: auto; height: auto;
+        z-index: -999;
+        object-fit: cover;
+        filter: contrast(1.05) brightness(1.02);
+    }
+
+    canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+
+    /* --- 2. 毛玻璃主菜单 --- */
+    #home-container { 
+        position: absolute; top: 50%; left: 50%; 
+        transform: translate(-50%, -50%); 
+        text-align: center; z-index: 20; 
+        display: flex; flex-direction: column; gap: 24px; 
+        background: rgba(255, 255, 255, 0.15); 
+        backdrop-filter: blur(20px);            
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.4); 
+        border-radius: 30px;
+        padding: 60px 80px;
+        box-shadow: var(--glass-shadow);
+        transition: opacity 0.5s;
+    }
+    
+    .home-title {
+        font-size: 56px; font-weight: 300; 
+        color: #fff;
+        margin-bottom: 8px; letter-spacing: 4px;
+        text-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    .subtitle {
+        font-size: 22px; color: rgba(255,255,255,0.9); 
+        margin-bottom: 30px; font-weight: 300; letter-spacing: 1px;
+    }
+
+    /* --- 3. 水晶按钮设计 --- */
+    .menu-btn {
+        position: relative;
+        padding: 24px 40px; 
+        width: 480px;
+        font-size: 28px; font-weight: 500;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1); 
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 20px;
+        cursor: pointer; 
+        outline: none;
+        transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        display: flex; justify-content: space-between; align-items: center;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    .btn-icon {
+        background: rgba(255,255,255,0.2);
+        width: 48px; height: 48px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; transition: all 0.3s;
+    }
+    
+    .menu-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.8);
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    
+    .menu-btn:hover .btn-icon {
+        background: #fff; color: var(--text-primary);
+        transform: rotate(-45deg);
+    }
+
+    .menu-btn.selected {
+        background: #fff;
+        color: var(--text-primary);
+        border-color: #fff;
+        transform: scale(1.05);
+        box-shadow: 0 0 30px rgba(255, 255, 255, 0.6);
+        z-index: 100;
+    }
+    .menu-btn.selected .btn-icon { background: var(--text-primary); color: #fff; }
+
+    .btn-duration:hover { box-shadow: 0 10px 30px rgba(252, 231, 125, 0.3); }
+    .btn-pitch:hover    { box-shadow: 0 10px 30px rgba(132, 250, 176, 0.3); }
+    .btn-loudness:hover { box-shadow: 0 10px 30px rgba(161, 140, 209, 0.3); }
+
+    /* --- 返回按钮 --- */
+    #back-btn { 
+        position: absolute; top: 40px; left: 40px; z-index: 10000; 
+        padding: 12px 28px; font-size: 18px; 
+        background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); 
+        border: 1px solid rgba(255,255,255,0.4); border-radius: 30px; 
+        cursor: pointer; color: #fff; font-weight: 500; display: none; 
+        transition: all 0.3s; pointer-events: auto;
+    }
+    #back-btn:hover { background: #fff; color: #333; }
+
+    /* 监控窗口美化 */
+    #share-window {
+        background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.8);
+    }
+    
+    #connect-btn {
+        background: rgba(255,255,255,0.2) !important;
+        backdrop-filter: blur(5px);
+        border: 1px solid #fff !important;
+        color: #fff !important;
+    }
+
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+    }
+    .home-title { animation: float 6s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+  <video id="bg-video" autoplay loop muted playsinline>
+    <source src="sky.mp4" type="video/mp4">
+  </video>
+ 
+  <div id="home-container">
+      <div>
+          <div class="home-title">你好，张阿姨</div> 
+          <div class="subtitle">今天的云很美，我们来做个深呼吸</div>
+      </div>
+      
+      <button id="btn-0" class="menu-btn btn-duration" onclick="enterDurationMode()">
+          <span>音长训练 · 吹拂蒲公英</span>
+          <div class="btn-icon">→</div>
+      </button>
+      
+      <button id="btn-1" class="menu-btn btn-pitch" onclick="enterPitchMode()">
+          <span>音调训练 · 上下升降</span>
+          <div class="btn-icon">↑</div>
+      </button>
+      
+      <button id="btn-2" class="menu-btn btn-loudness" onclick="enterLoudnessMode()">
+          <span>响度训练 · 转动风车</span>
+          <div class="btn-icon">⚡</div>
+      </button>
+  </div>
+ 
+  <button id="back-btn" onclick="goHome()">← 返回</button>
+ 
+  <div id="share-window" style="display:none; position: absolute; bottom: 40px; left: 40px; width: 300px; padding: 15px; border-radius: 20px; z-index: 9999; flex-direction: column; align-items: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); pointer-events: auto;">
+    <div id="video-wrapper" style="width: 100%; height: 180px; background: rgba(0,0,0,0.03); border-radius: 12px; overflow: hidden; display: none; border: 1px solid #fff; position: relative; margin-bottom: 12px;">
+        <div id="close-video" onclick="stopScreenShare()" style="position: absolute; top: 8px; right: 8px; background: #FFAB91; color: white; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 26px; font-size: 16px; cursor: pointer; z-index: 10; border: 2px solid white;">×</div>
+        <video id="external-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; background: #000;"></video>
+    </div>
+    <button id="share-btn" onclick="startScreenShare()" style="width: 100%; padding: 15px 0; background: transparent; color: #666; border: 2px dashed #ccc; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 14px; transition: all 0.2s;">+ 嵌入外部软件窗口</button>
+  </div>
+ 
+  <script>
+    // --- 全局变量 ---
+    let port;             
+    let connectBtn;       
+    let mic;
+    let fft;
+    let gameState = 'HOME';
+    let menuIndex = 0;
+ 
+    let rawEMG = 0;       
+    let smoothEMG = 0;    
+    let emgHistory = [];
+    const maxHistoryLen = 150;
+ 
+    // 通用绘图对象
+    let dandelionX, dandelionY;
+    let targetDandelionY = 0;
+    let headRadius = 90;
+    let seeds = [];
+    let headParticles = [];
+    
+    // 音长模式变量
+    let flightSpeed = 0;    
+    let continuousTime = 0;
+    let hillsOffset = 0;    
+    let windLines = [];     
+    let stars = [];         
+    let scoreStars = 0;      
+    let showBonusText = 0;  
+    let distanceParticles = []; // 音长模式背景粒子
+
+    // 音调模式变量
+    let targetBubbles = [];
+    let pitchScore = 0;
+    let netWobble = 0;
+    let birds = []; // 飞鸟数组
+    let explosionParticles = []; // 爆炸粒子
+ 
+    // 响度模式变量
+    let loudnessScore = 0;
+    let windmillRotation = 0;
+    let windmillSpeed = 0;    
+ 
+    let screenStream = null;
+    
+    // 缤纷气泡色盘
+    const BUBBLE_PALETTE = ["#EEBEED", "#9FD6FF", "#FFED7B", "#B1ECCA"];
+
+    const THEME = {
+        white: "#FFFFFF",
+        yellow: "#FFD54F",
+        blue:   "#4FC3F7",
+        pink:   "#FF8A65"  
+    };
+    
+    const activePalette = [THEME.yellow, THEME.blue, THEME.pink, "#E0E0E0"];
+    const colors = { stem: '#FFFFFF', textDark: '#FFFFFF' }; 
+
+    function setup() {
+      let cnv = createCanvas(windowWidth, windowHeight);
+      cnv.style('display', 'block');
+      cnv.style('z-index', '1');
+      
+      dandelionX = width / 2;
+      dandelionY = height * 0.65;
+ 
+      mic = new p5.AudioIn();
+      fft = new p5.FFT(0.8, 1024);
+      fft.setInput(mic);
+ 
+      if (typeof createSerial !== 'undefined') { port = createSerial(); }
+      
+      // 初始化蒲公英粒子
+      let totalParticles = 250;
+      for(let i=0; i<totalParticles; i++){
+        headParticles.push({
+          angle: random(TWO_PI), radiusRatio: random(0.05, 1),
+          size: random(2, 5), baseAlpha: random(150, 240), offset: random(1000)
+        });
+      }
+      
+      // 初始化音长模式景深粒子
+      for(let i=0; i<80; i++) { distanceParticles.push(new DistanceParticle()); }
+
+      connectBtn = createButton('🔗 硬件未连接');
+      connectBtn.id('connect-btn');
+      connectBtn.position(width/2 - 70, height - 80);
+      connectBtn.mousePressed(handleConnectClick);
+      connectBtn.hide();
+      
+      updateMenuHighlight();
+    }
+ 
+    function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+    function enterDurationMode() { gameState = 'DURATION'; updateUIState(false); dandelionX = 200; dandelionY = height * 0.7; flightSpeed = 0; continuousTime = 0; hillsOffset = 0; scoreStars = 0; stars = []; startAudio(); }
+    function enterPitchMode() { 
+        gameState = 'PITCH'; updateUIState(false); 
+        dandelionX = width / 2; dandelionY = height / 2; targetDandelionY = height / 2; pitchScore = 0; targetBubbles = []; 
+        birds = []; // 清空飞鸟
+        explosionParticles = []; // 清空爆炸粒子
+        startAudio(); 
+    }
+    function enterLoudnessMode() { gameState = 'LOUDNESS'; updateUIState(true); if (!port || !port.opened()) connectBtn.show(); dandelionX = width / 2; dandelionY = height * 0.65; loudnessScore = 0; seeds = []; windmillRotation = 0; windmillSpeed = 0; windLines = []; resetTrainingState(); startAudio(); }
+    function goHome() { gameState = 'HOME'; document.getElementById('home-container').style.display = 'flex'; document.getElementById('back-btn').style.display = 'none'; document.getElementById('share-window').style.display = 'none'; connectBtn.hide(); stopScreenShare(); menuIndex = 0; updateMenuHighlight(); }
+    function updateUIState(showMonitor) { document.getElementById('home-container').style.display = 'none'; document.getElementById('back-btn').style.display = 'block'; document.getElementById('share-window').style.display = showMonitor ? 'flex' : 'none'; connectBtn.hide(); }
+    function resetTrainingState() { trainPhase = 0; initTimer = 0; goodTimer = 0; trainMsg = "等待初始化..."; trainMsgColor = "#FFF"; }
+    function startAudio() { try { userStartAudio(); mic.start(); } catch(e) {} }
+    
+    function updateMenuHighlight() {
+        const btns = [document.getElementById('btn-0'), document.getElementById('btn-1'), document.getElementById('btn-2')];
+        btns.forEach((btn, index) => {
+            if (btn) {
+                if (index === menuIndex) { btn.classList.add('selected'); btn.focus(); } else { btn.classList.remove('selected'); btn.blur(); }
+            }
+        });
+    }
+    function keyPressed() {
+        if (key === 'AudioVolumeUp' || keyCode === 175 || keyCode === 39 || keyCode === 38 || keyCode === 34) { if (gameState === 'HOME') { menuIndex = (menuIndex + 1) % 3; updateMenuHighlight(); } return false; } 
+        else if (key === 'AudioVolumeDown' || keyCode === 174 || keyCode === 13 || keyCode === 32 || keyCode === 40 || keyCode === 33) { if (gameState === 'HOME') { if (menuIndex === 0) enterDurationMode(); else if (menuIndex === 1) enterPitchMode(); else if (menuIndex === 2) enterLoudnessMode(); } else { goHome(); } return false; }
+    }
+    async function startScreenShare() { try { screenStream = await navigator.mediaDevices.getDisplayMedia({video: { cursor: "always" }, audio: false}); const videoElem = document.getElementById('external-video'); document.getElementById('video-wrapper').style.display = "block"; document.getElementById('share-btn').style.display = "none"; videoElem.srcObject = screenStream; screenStream.getVideoTracks()[0].onended = () => { stopScreenShare(); }; } catch (err) {} }
+    function stopScreenShare() { const videoElem = document.getElementById('external-video'); if (screenStream) { screenStream.getTracks().forEach(track => track.stop()); screenStream = null; } videoElem.srcObject = null; document.getElementById('video-wrapper').style.display = "none"; document.getElementById('share-btn').style.display = "block"; }
+    async function handleConnectClick() { if (!navigator.serial) { alert("请使用 Chrome/Edge"); return; } try { await userStartAudio(); mic.start(); } catch (e) {} if (port) { if (!port.opened()) { try { await port.open(9600); connectBtn.html("🟢 已连接"); } catch (e) {} } else { port.close(); connectBtn.html("🔗 连接硬件"); } } }
+ 
+    // ================= 主绘制循环 =================
+    function draw() {
+      clear(); 
+
+      if (port && port.opened()) {
+          let str = port.readUntil("\n");
+          if (str.length > 0) { let val = Number(str); if (!isNaN(val)) { rawEMG = val; smoothEMG = 0.2 * smoothEMG + 0.8 * val; } }
+      }
+      emgHistory.push(smoothEMG); if (emgHistory.length > maxHistoryLen) emgHistory.shift();
+      
+      let micVol = 0; if (getAudioContext().state === 'running') micVol = mic.getLevel();
+      blendMode(BLEND);
+      
+      if (gameState === 'HOME') return;
+ 
+      // 游戏内遮罩：深色滤镜衬托白色蒲公英
+      noStroke(); fill(0, 30, 60, 40); rect(0, 0, width, height);
+
+      // --- 1. 音长 ---
+      if (gameState === 'DURATION') {
+          if (micVol > 0.01) {
+              let targetSpeed = map(micVol, 0.01, 0.2, 3, 10, true); flightSpeed = lerp(flightSpeed, targetSpeed, 0.1);
+              dandelionY -= 2; dandelionY = max(dandelionY, 150); hillsOffset += flightSpeed; continuousTime += deltaTime / 1000;
+              if (frameCount % 10 === 0) spawnTrailingSeed(dandelionX, dandelionY);
+              if (random(1) < 0.3) windLines.push({x: dandelionX - 60, y: dandelionY + random(-20, 20), len: random(20, 50), speed: random(4, 7), alpha: 255});
+          } else {
+              flightSpeed = lerp(flightSpeed, 0, 0.05); hillsOffset += flightSpeed; dandelionY += 2; dandelionY = min(dandelionY, height * 0.75);
+              if (flightSpeed < 0.5) continuousTime = 0;
+          }
+          
+          // 绘制景深粒子背景
+          for (let dp of distanceParticles) { dp.update(flightSpeed); dp.display(); }
+
+          if (frameCount % 60 === 0 && flightSpeed > 2) { stars.push({x: width + 50, y: constrain(dandelionY + random(-100, 100), 200, height * 0.6), collected: false, size: 50, rot: random(TWO_PI)}); }
+          for (let i = stars.length - 1; i >= 0; i--) {
+              let s = stars[i]; s.x -= (flightSpeed + 2); s.rot += 0.05;
+              if (!s.collected && dist(dandelionX, dandelionY, s.x, s.y) < (headRadius/2 + s.size/2 + 20)) { s.collected = true; scoreStars++; showBonusText = 30; }
+              if (!s.collected) { drawStar(s.x, s.y, 25, 45, 5, s.rot); } else { s.size += 5; noFill(); stroke(THEME.yellow); strokeWeight(4); ellipse(s.x, s.y, s.size * 2); }
+              if (s.x < -100 || s.size > 200) stars.splice(i, 1);
+          }
+          drawWindLines();
+          
+          // 🌟 新增：绘制左侧蒲公英图标 (黄色)
+          drawSmallDandelionIcon(width - 130, 70, THEME.yellow);
+
+          textAlign(RIGHT, TOP); textSize(60); textStyle(BOLD); fill(THEME.yellow); 
+          drawingContext.shadowBlur = 10; drawingContext.shadowColor = THEME.yellow;
+          text(scoreStars, width - 60, 40);
+          drawingContext.shadowBlur = 0;
+          
+          textAlign(CENTER, TOP); textSize(24); textStyle(NORMAL); fill(255, 255, 255, 180); noStroke(); text("保持发声时长", width/2, 50);
+          textSize(80); textStyle(BOLD); fill(255); text(continuousTime.toFixed(1) + "s", width/2, 90);
+          
+          textSize(40); fill(THEME.blue);
+          if (showBonusText > 0) { text("+1 ⭐", dandelionX, dandelionY - 120); showBonusText--; }
+          else if (continuousTime > 5) { text("太棒了！", width/2, 220); }
+          else if (continuousTime < 0.1) { fill(255,255,255,100); textSize(20); text("请发出“啊——”的声音", width/2, 230); }
+          drawStandardDandelion(dandelionX, dandelionY, headRadius, micVol * 1.5, true, color(255));
+      }
+ 
+      // ================= 🌟 2. 音调训练 🌟 =================
+      else if (gameState === 'PITCH') {
+          // 2.1 绘制大飞鸟
+          if (frameCount % 120 === 0 && random(1) < 0.7) { birds.push(new Bird()); }
+          for (let i = birds.length - 1; i >= 0; i--) {
+              birds[i].update(); birds[i].display();
+              if (birds[i].isDead()) birds.splice(i, 1);
+          }
+
+          drawPitchScale();
+          let spectrum = fft.analyze(); let maxEnergy = 0; let maxIndex = 0;
+          for (let i = 2; i < 25; i++) { if (spectrum[i] > maxEnergy) { maxEnergy = spectrum[i]; maxIndex = i; } }
+          if (micVol > 0.008 && maxEnergy > 50) { let mapY = map(maxIndex, 3, 12, height - 150, 150, true); targetDandelionY = mapY; } else { targetDandelionY = height * 0.8; }
+          dandelionY = lerp(dandelionY, targetDandelionY, 0.08);
+          
+          if (frameCount % 90 === 0) {
+              let type = random(["HIGH", "LOW"]);
+              let by = (type === "HIGH") ? random(100, height/2 - 50) : random(height/2 + 50, height - 100);
+              let randomHex = random(BUBBLE_PALETTE); let bColor = color(randomHex); 
+              targetBubbles.push({ x: width + 50, y: by, size: 70, type: type, col: bColor, collected: false, vx: random(2, 3), wobbleOffset: random(100) });
+          }
+
+          for (let i = targetBubbles.length - 1; i >= 0; i--) {
+              let t = targetBubbles[i]; t.x -= t.vx; t.rot += 0.01;
+              // 2.2 碰撞检测与爆炸触发
+              if (!t.collected && dist(dandelionX, dandelionY, t.x, t.y) < (60 + t.size/2)) { 
+                  t.collected = true; pitchScore++; 
+                  // 生成爆炸粒子
+                  for(let k=0; k<15; k++) {
+                      explosionParticles.push(new ExplosionParticle(t.x, t.y, t.col));
+                  }
+              }
+              if (!t.collected) { drawRealisticTarget(t.x, t.y, t.size, t.col, t.wobbleOffset); fill(255); textSize(20); noStroke(); textAlign(CENTER, CENTER); text(t.type === "HIGH" ? "高" : "低", t.x, t.y); } 
+              
+              if (t.collected) { targetBubbles.splice(i, 1); continue; }
+              if (t.x < -100) targetBubbles.splice(i, 1);
+          }
+
+          // 2.3 更新并绘制爆炸粒子
+          for (let i = explosionParticles.length - 1; i >= 0; i--) {
+              explosionParticles[i].update();
+              explosionParticles[i].display();
+              if (explosionParticles[i].isDead()) explosionParticles.splice(i, 1);
+          }
+
+          // 🌟 新增：绘制左侧蒲公英图标 (白色)
+          drawSmallDandelionIcon(width - 130, 70, color(255));
+
+          textAlign(RIGHT, TOP); textSize(60); fill(255); text(pitchScore, width - 60, 40);
+          netWobble = sin(frameCount * 0.05) * 5; drawNet(dandelionX, dandelionY, netWobble);
+      }
+ 
+      // --- 3. 响度 ---
+      else if (gameState === 'LOUDNESS') {
+          let isHardwareConnected = (port && port.opened());
+          displayDataOverlay(isHardwareConnected);
+          let driverSignal = isHardwareConnected ? map(smoothEMG, 50, 800, 0, 1, true) : constrain(micVol * 3.0, 0, 1);
+          let targetRotSpeed = map(driverSignal, 0, 1, 0, 0.5);
+          windmillSpeed = lerp(windmillSpeed, targetRotSpeed, 0.05);
+          windmillRotation += windmillSpeed;
+          if (driverSignal > 0.05) { if (random(1) < driverSignal * 0.8) { windLines.push({ x: dandelionX, y: dandelionY - 50, vx: random(5, 10), vy: random(-2, 2), color: random(activePalette), life: 100 }); } }
+          for (let i = windLines.length - 1; i >= 0; i--) { let p = windLines[i]; p.x += p.vx; p.y += p.vy; p.life -= 2; fill(p.color); noStroke(); ellipse(p.x, p.y, 8, 8); if (p.life <= 0 || p.x > width) windLines.splice(i, 1); }
+          drawWindmill(width - 150, height/2, windmillRotation);
+          if (driverSignal > 0.1) { let spawnCount = map(driverSignal, 0.1, 1.0, 1, 15); for(let i=0; i < spawnCount; i++) { if(random(1) < 0.5) spawnSeed(driverSignal, 0.01); } }
+          drawStandardDandelion(dandelionX, dandelionY, headRadius, driverSignal, false, color(255));
+          textAlign(CENTER, TOP); 
+          if (driverSignal > 0.6) { fill(THEME.pink); textSize(48); textStyle(BOLD); text("风力强劲！", width/2, 180); } 
+          else if (driverSignal > 0.1) { fill(THEME.yellow); textSize(36); text("转动风车", width/2, 180); }
+      }
+ 
+      for (let i = seeds.length - 1; i >= 0; i--) { seeds[i].update(); seeds[i].display(); if (seeds[i].isDead()) seeds.splice(i, 1); }
+    }
+ 
+    // --- 绘图函数 (适配白色主题) ---
+    function drawStandardDandelion(x, y, r, vol, isHorizontal, mainColor) {
+        push(); translate(x, y);
+        if (isHorizontal) { let tilt = map(flightSpeed, 0, 8, 0, PI/6); rotate(tilt); }
+        translate(-x, -y);
+        push(); noFill(); stroke(255); strokeWeight(4); strokeCap(ROUND);
+        let shake = (vol > 0.01) ? random(-vol * 80, vol * 80) : 0;
+        beginShape(); vertex(x, y + 10); bezierVertex(x + shake, y + 150, x - 10, height, x, height + 50); endShape();
+        pop();
+        push(); translate(x, y);
+        let breath = sin(frameCount * 0.02) * 2.5 + (vol * 50);
+        let currentR = r + breath;
+        noStroke(); fill(255, 255, 255, 200); ellipse(0, 0, currentR * 0.4); // 花托
+        for(let p of headParticles){
+            let dist = p.radiusRatio * currentR; let px = cos(p.angle) * dist; let py = sin(p.angle) * dist;
+            fill(255, 255, 255, p.baseAlpha); ellipse(px, py, p.size);
+        }
+        pop(); pop();
+    }
+    
+    // 气泡现在有半透明的底色了
+    function drawRealisticTarget(x, y, size, tintColor, wobbleOffset) {
+        push(); translate(x, y);
+        let wobble = sin(frameCount * 0.05 + wobbleOffset) * 3;
+        // 1. 创建半透明底色
+        let fillColor = color(tintColor); fillColor.setAlpha(120); 
+        // 2. 绘制带底色和描边的气泡
+        stroke(tintColor); strokeWeight(2); fill(fillColor); ellipse(0, 0, size * 1.4 + wobble);
+        // 中心点
+        fill(tintColor); noStroke(); ellipse(0,0,10); 
+        // 简单的蒲公英符号
+        stroke(255,255,255,150); strokeWeight(1);
+        for(let i=0; i<8; i++) { push(); rotate(TWO_PI*i/8 + frameCount*0.01); line(0,0,size*0.5,0); pop(); }
+        pop();
+    }
+ 
+    function drawNet(x, y, wobble) {
+        push(); translate(x, y); rotate(wobble * 0.02);
+        stroke(255); strokeWeight(6); line(0, 0, -40, 120); // 白色手柄
+        noFill(); stroke(255); strokeWeight(4); ellipse(0, -40, 100, 60); // 框
+        stroke(255, 255, 255, 100); strokeWeight(1); // 网
+        for(let i=-35; i<=35; i+=10) { beginShape(); vertex(i, -40 + abs(i)*0.2); bezierVertex(i*1.1, -10, i*0.5, 20, 0, 30); endShape(); }
+        pop();
+    }
+    
+    function drawWindmill(x, y, rotation) {
+        push(); translate(x, y);
+        stroke(255,255,255,150); strokeWeight(6); line(0, 0, 0, 250); // 杆
+        rotate(rotation); noStroke();
+        for(let i=0; i<4; i++) {
+            rotate(HALF_PI); fill(255, 255, 255, 200); // 白色半透明扇叶
+            beginShape(); vertex(0, 0); vertex(30, -80); vertex(0, -100); vertex(-30, -80); endShape(CLOSE);
+        }
+        fill(255); ellipse(0, 0, 15, 15); pop();
+    }
+ 
+    function drawPitchScale() {
+        let x = width - 100;
+        stroke(255, 255, 255, 50); strokeWeight(2); line(x, 100, x, height - 100);
+        noStroke(); textAlign(LEFT, CENTER); textSize(18); fill(255,255,255,180);
+        text("高音", x + 30, 100); fill(THEME.pink); ellipse(x, 100, 12);
+        text("中音", x + 30, height/2); fill(THEME.yellow); ellipse(x, height/2, 12);
+        text("低音", x + 30, height - 100); fill(THEME.blue); ellipse(x, height - 100, 12);
+    }
+
+    function drawStar(x, y, r1, r2, n, rot) {
+      push(); translate(x, y); rotate(rot); fill(THEME.yellow); noStroke();
+      drawingContext.shadowBlur = 15; drawingContext.shadowColor = THEME.yellow;
+      let angle = TWO_PI / n; let halfAngle = angle / 2.0;
+      beginShape(); for (let a = 0; a < TWO_PI; a += angle) {
+        let sx = cos(a) * r2; let sy = sin(a) * r2; vertex(sx, sy);
+        sx = cos(a + halfAngle) * r1; sy = sin(a + halfAngle) * r1; vertex(sx, sy);
+      } endShape(CLOSE); drawingContext.shadowBlur = 0; pop();
+    }
+
+    // 🌟 新增：绘制小蒲公英图标的辅助函数
+    function drawSmallDandelionIcon(x, y, col) {
+        push();
+        translate(x, y);
+        noStroke();
+        fill(col);
+        ellipse(0, 0, 15, 15); // 中心圆
+        stroke(col); strokeWeight(2);
+        for(let i=0; i<8; i++) {
+            push(); rotate(TWO_PI * i / 8); line(0, 0, 20, 0); 
+            noStroke(); ellipse(20, 0, 5, 5); // 线条末端的小圆点
+            pop();
+        }
+        pop();
+    }
+    
+    function spawnSeed(vol, threshold) { let startY = (gameState === 'PITCH') ? dandelionY : height * 0.65; let startX = (gameState === 'PITCH') ? dandelionX : width / 2; let angle = random(TWO_PI); let startRadius = headRadius * random(0.8, 1.0); let sX = startX + cos(angle) * startRadius; let sY = startY + sin(angle) * startRadius; let force = map(vol, threshold, 0.3, 2, 35, true); let vel = p5.Vector.fromAngle(angle).mult(force); vel.y -= random(1, 3); seeds.push(new Seed(sX, sY, vel, vol)); }
+    function spawnTrailingSeed(x, y) { let angle = PI + random(-0.5, 0.5); let vel = p5.Vector.fromAngle(angle).mult(random(2, 5)); seeds.push(new Seed(x - 50, y, vel, 0.1)); }
+    function drawWindLines() { for (let i = windLines.length - 1; i >= 0; i--) { let l = windLines[i]; l.x -= l.speed; l.alpha -= 10; stroke(l.color || 255); strokeWeight(2); line(l.x, l.y, l.x - l.len, l.y); if (l.alpha <= 0) windLines.splice(i, 1); } }
+    
+    function displayDataOverlay(isConnected) {
+        push(); noStroke(); fill(0, 0, 0, 100); rect(20, 80, 200, 100, 15); fill(255); textAlign(LEFT, TOP);
+        let statusText = isConnected ? "🟢 硬件连接" : "🟠 麦克风"; textSize(16); text(statusText, 35, 95); 
+        if (isConnected) { text("值: " + rawEMG, 35, 125); text("平滑: " + Math.floor(smoothEMG), 35, 150); }
+        else { text("音量: " + mic.getLevel().toFixed(2), 35, 130); } pop();
+    }
+ 
+    class Seed { constructor(x, y, vel, originVol) { this.pos = createVector(x, y); this.vel = vel; this.col = color(255); this.floatOffset = random(1000); this.drag = map(originVol, 0.01, 0.3, 0.85, 0.98, true); this.lifespan = map(originVol, 0.01, 0.3, 60, 400, true); this.maxLifespan = this.lifespan; } update() { this.vel.mult(this.drag); this.pos.add(this.vel); let floatStrength = 0.8; this.pos.x += map(noise(frameCount * 0.01, this.floatOffset), 0, 1, -floatStrength, floatStrength); this.pos.y -= 0.2; this.lifespan -= 1.0; } display() { let alpha = map(this.lifespan, 0, this.maxLifespan * 0.2, 0, 255, true); this.col.setAlpha(alpha); push(); translate(this.pos.x, this.pos.y); rotate(this.vel.heading() + PI/2); stroke(this.col); strokeWeight(2); line(0, 0, 0, -20); stroke(255, 255, 255, alpha * 0.7); strokeWeight(1); for(let a = -PI/3; a <= PI/3; a+=PI/6) line(0, -20, sin(a)*15, -20 - cos(a)*15); pop(); } isDead() { return (this.lifespan < 0 || this.pos.y < -100 || this.pos.x < -100 || this.pos.x > width+100); } }
+
+    // 景深粒子类
+    class DistanceParticle {
+        constructor() {
+            this.reset();
+            this.x = random(width); // 初始随机分布
+        }
+        reset() {
+            this.x = width + random(50, 200); 
+            this.y = random(height);
+            this.z = random(0.1, 1.0); // 深度
+            this.baseSize = random(5, 25);
+            this.speedFactor = map(this.z, 0.1, 1.0, 2.0, 0.5); 
+            let hex = random(BUBBLE_PALETTE); // 使用缤纷色盘
+            this.col = color(hex);
+            this.alpha = map(this.z, 0.1, 1.0, 200, 50);
+            this.col.setAlpha(this.alpha);
+        }
+        update(currentFlightSpeed) {
+            let actualSpeed = (currentFlightSpeed * this.speedFactor * 0.8) + (this.speedFactor * 0.3);
+            this.x -= actualSpeed;
+            if (this.x < -50) { this.reset(); }
+        }
+        display() {
+            noStroke();
+            fill(this.col);
+            let actualSize = this.baseSize * map(this.z, 0.1, 1.0, 1.5, 0.6);
+            ellipse(this.x, this.y, actualSize, actualSize);
+        }
+    }
+
+    // 飞鸟类 (变大了)
+    class Bird {
+        constructor() {
+            this.x = width + 50;
+            this.y = random(height * 0.1, height * 0.5); 
+            this.speed = random(2, 4);
+            // 🌟 修改点：尺寸变大
+            this.size = random(30, 50); 
+            this.flapOffset = random(TWO_PI);
+            this.col = color(255, 255, 255, 200); // 更明显的白色
+        }
+        update() {
+            this.x -= this.speed;
+            this.y += sin(frameCount * 0.05 + this.flapOffset) * 0.5; 
+        }
+        display() {
+            push(); translate(this.x, this.y);
+            noFill(); stroke(this.col); strokeWeight(3); strokeCap(ROUND); strokeJoin(ROUND);
+            beginShape();
+            vertex(-this.size/2, -this.size/4 + sin(frameCount * 0.1 + this.flapOffset)*4); 
+            vertex(0, 0); 
+            vertex(this.size/2, -this.size/4 + sin(frameCount * 0.1 + this.flapOffset)*4); 
+            endShape();
+            pop();
+        }
+        isDead() { return this.x < -50; }
+    }
+
+    // 🌟 爆炸粒子类
+    class ExplosionParticle {
+        constructor(x, y, col) {
+            this.pos = createVector(x, y);
+            this.vel = p5.Vector.random2D().mult(random(2, 6)); // 随机爆发速度
+            this.col = color(col); // 使用气泡本身的颜色
+            this.lifespan = 255;
+            this.size = random(5, 12);
+        }
+        update() {
+            this.pos.add(this.vel);
+            this.vel.mult(0.95); // 阻力，慢慢停下
+            this.lifespan -= 10; // 快速消失
+        }
+        display() {
+            this.col.setAlpha(this.lifespan);
+            noStroke(); fill(this.col);
+            ellipse(this.pos.x, this.pos.y, this.size);
+        }
+        isDead() { return this.lifespan < 0; }
+    }
+  </script>
+</body>
+</html>
